@@ -28,7 +28,7 @@ public class EntityRendererRougeAndroid<T extends EntityRougeAndroidMob> extends
 	public static final List<String> NAMES = Arrays.asList("the_codedone", "chairosto", "buuz135");
 
 	private final boolean hologram;
-
+    	public static boolean RENDER_ANDROID_LABEL = true;
 	public EntityRendererRougeAndroid(RenderManager renderManager, ModelBiped modelBiped, float f, boolean hologram) {
 		super(renderManager, modelBiped, f);
 		this.hologram = hologram;
