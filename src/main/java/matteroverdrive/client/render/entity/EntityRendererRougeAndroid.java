@@ -52,8 +52,14 @@ public class EntityRendererRougeAndroid<T extends EntityRougeAndroidMob> extends
 
 	@Override
 	protected boolean canRenderName(T entity) {
-		return entity.getTeam() != null || Minecraft.getMinecraft().player.getDistance(entity) < 18;
-	}
+        if(entityLiving.getTeam() != null)
+        {
+            return true;
+        }else
+        {
+            return RENDER_ANDROID_LABEL && Minecraft.getMinecraft().thePlayer.getDistanceToEntity(entityLiving) < 18;
+        }
+    }
 
 	@Override
 	protected void preRenderCallback(T entity, float partialTicks) {
