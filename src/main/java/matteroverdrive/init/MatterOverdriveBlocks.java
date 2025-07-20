@@ -14,6 +14,7 @@ import matteroverdrive.util.MOLog;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.MapColor;
 import net.minecraft.block.material.Material;
+import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.item.EnumDyeColor;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
@@ -42,13 +43,16 @@ public class MatterOverdriveBlocks {
 	public MOBlock machine_hull;
 	// Matter Network
 	public BlockDecomposer decomposer;
+	public BlockDecomposer decomposer_running;
 	public BlockMatterRecycler recycler;
+	public BlockMatterRecycler recycler_running;
 	public BlockReplicator replicator;
 	public BlockMatterPipe matter_pipe;
 	public BlockMatterPipe heavy_matter_pipe;
 	public BlockNetworkPipe network_pipe;
 	public BlockNetworkRouter network_router;
 	public BlockMatterAnalyzer matter_analyzer;
+	public BlockMatterAnalyzer matter_analyzer_running;
 	public BlockPatternMonitor pattern_monitor;
 	public BlockPatternStorage pattern_storage;
 	public BlockNetworkSwitch network_switch;
@@ -128,19 +132,21 @@ public class MatterOverdriveBlocks {
 		tritanium_block = register(new MOBlockOre(TRITANIUM, "tritanium_block", "blockTritanium"));
 		tritanium_block.setHardness(15.0F).setResistance(10.0F).setHarvestLevel("pickaxe", 2);
 
-//		Crafting
-		machine_hull = register(new MOBlock(TRITANIUM, "machine_hull"));
-		machine_hull.setHardness(15.0F).setResistance(8.0F).setHarvestLevel("pickaxe", 2);
-
 //		Matter Network
 		decomposer = register(new BlockDecomposer(TRITANIUM, "decomposer"));
+		decomposer_running = register(new BlockDecomposer(TRITANIUM, "decomposer_running"));
+		decomposer_running.setCreativeTab(null);
 		recycler = register(new BlockMatterRecycler(TRITANIUM, "matter_recycler"));
+		recycler_running = register(new BlockMatterRecycler(TRITANIUM, "matter_recycler_running"));
+		recycler_running.setCreativeTab(null);
 		replicator = register(new BlockReplicator(TRITANIUM, "replicator"));
 		matter_pipe = register(new BlockMatterPipe(TRITANIUM, "matter_pipe"));
 		heavy_matter_pipe = register(new BlockHeavyMatterPipe(TRITANIUM, "heavy_matter_pipe"));
 		network_pipe = register(new BlockNetworkPipe(TRITANIUM, "network_pipe"));
 		network_router = register(new BlockNetworkRouter(TRITANIUM, "network_router"));
 		matter_analyzer = register(new BlockMatterAnalyzer(TRITANIUM, "matter_analyzer"));
+		matter_analyzer_running = register(new BlockMatterAnalyzer(TRITANIUM, "matter_analyzer_running"));
+		matter_analyzer_running.setCreativeTab(null);
 		pattern_monitor = register(new BlockPatternMonitor(TRITANIUM, "pattern_monitor"));
 		pattern_storage = register(new BlockPatternStorage(TRITANIUM, "pattern_storage"));
 		network_switch = register(new BlockNetworkSwitch(TRITANIUM, "network_switch"));
@@ -149,11 +155,12 @@ public class MatterOverdriveBlocks {
 		solar_panel = register(new BlockSolarPanel(TRITANIUM, "solar_panel"));
 
 //		Gravitational Anomaly / Fusion Reactor
-		gravitational_anomaly = register(new BlockGravitationalAnomaly(Material.PORTAL, "gravitational_anomaly"));
+		gravitational_anomaly = register(new BlockGravitationalAnomaly(TRITANIUM, "gravitational_anomaly"));
 		gravitational_stabilizer = register(new BlockGravitationalStabilizer(TRITANIUM, "gravitational_stabilizer"));
 		fusion_reactor_controller = register(new BlockFusionReactorController(TRITANIUM, "fusion_reactor_controller"));
 		fusion_reactor_coil = register(new BlockFusionReactorCoil(TRITANIUM, "fusion_reactor_coil"));
 		fusionReactorIO = register(new BlockFusionReactorIO(TRITANIUM, "fusion_reactor_io"));
+		machine_hull = register(new BlockMachineHull(TRITANIUM, "machine_hull"));
 
 //		Fluids
 		blockMatterPlasma = register(new BlockFluidMatterPlasma(OverdriveFluids.matterPlasma, Material.WATER));

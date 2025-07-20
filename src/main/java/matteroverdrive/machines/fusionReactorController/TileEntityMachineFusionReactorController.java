@@ -4,6 +4,7 @@ package matteroverdrive.machines.fusionReactorController;
 import static java.lang.Math.round;
 import static matteroverdrive.util.MOBlockHelper.getAboveSide;
 
+import java.text.DecimalFormat;
 import java.util.EnumSet;
 
 import javax.annotation.Nonnull;
@@ -24,6 +25,14 @@ import matteroverdrive.tile.TileEntityFusionReactorPart;
 import matteroverdrive.tile.TileEntityGravitationalAnomaly;
 import matteroverdrive.util.MOEnergyHelper;
 import matteroverdrive.util.TimeTracker;
+import dan200.computercraft.api.lua.ILuaContext;
+import dan200.computercraft.api.lua.LuaException;
+import dan200.computercraft.api.peripheral.IComputerAccess;
+import dan200.computercraft.api.peripheral.IPeripheral;
+import li.cil.oc.api.machine.Arguments;
+import li.cil.oc.api.machine.Context;
+import li.cil.oc.api.network.ManagedPeripheral;
+import li.cil.oc.api.network.SimpleComponent;
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.resources.I18n;
@@ -41,13 +50,15 @@ import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.energy.CapabilityEnergy;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
+import net.minecraftforge.fml.common.Optional;
 
-/*@Optional.InterfaceList({
-		@Optional.Interface(modid = "ComputerCraft", iface = "dan200.computercraft.api.peripheral.IPeripheral"),
-		@Optional.Interface(modid = "OpenComputers", iface = "li.cil.oc.api.network.SimpleComponent"),
-		@Optional.Interface(modid = "OpenComputers", iface = "li.cil.oc.api.network.ManagedPeripheral")
-})*/
-public class TileEntityMachineFusionReactorController extends MOTileEntityMachineMatter {
+@Optional.InterfaceList({
+		@Optional.Interface(iface = "dan200.computercraft.api.peripheral.IPeripheral", modid = "computercraft"),
+		@Optional.Interface(iface = "li.cil.oc.api.network.SimpleComponent", modid = "opencomputers"),
+		@Optional.Interface(iface = "li.cil.oc.api.network.ManagedPeripheral", modid = "opencomputers") })
+@SimpleComponent.SkipInjection
+public class TileEntityMachineFusionReactorController extends MOTileEntityMachineMatter
+		implements IPeripheral, SimpleComponent, ManagedPeripheral {
 	public static final int[] positions = new int[] { 0, 5, 1, 0, 2, 0, 3, 1, 4, 2, 5, 3, 5, 4, 5, 5, 5, 6, 5, 7, 4, 8,
 			3, 9, 2, 10, 1, 10, 0, 10, -1, 10, -2, 10, -3, 9, -4, 8, -5, 7, -5, 6, -5, 5, -5, 4, -5, 3, -4, 2, -3, 1,
 			-2, 0, -1, 0 };
@@ -58,7 +69,7 @@ public class TileEntityMachineFusionReactorController extends MOTileEntityMachin
 	public static int MAX_GRAVITATIONAL_ANOMALY_DISTANCE = 3;
 	public static int ENERGY_CAPACITY = 100000000;
 	public static int MATTER_STORAGE = 2048;
-	public static int ENERGY_PER_TICK = 2048;
+	public static int ENERGY_PER_TICK = 9048;
 	public static double MATTER_DRAIN_PER_TICK = 1.0D / 80.0D;
 	private final TimeTracker structureCheckTimer;
 	private final MultiBlockTileStructureMachine multiBlock;
@@ -122,8 +133,6 @@ public class TileEntityMachineFusionReactorController extends MOTileEntityMachin
 			worldTickLast = getWorld().getTotalWorldTime();
 			super.update();
 			if (!world.isRemote) {
-				// System.out.println("Fusion Reactor Update in chunk that is loaded:" +
-				// world.getChunkFromBlocks(x,z).isChunkLoaded);
 				manageStructure();
 				manageEnergyGeneration();
 				manageEnergyExtract();
@@ -361,7 +370,7 @@ public class TileEntityMachineFusionReactorController extends MOTileEntityMachin
 		if (anomalyPosition != null) {
 			TileEntity entity = world.getTileEntity(getPos().add(anomalyPosition));
 			if (entity instanceof TileEntityGravitationalAnomaly) {
-				return ((TileEntityGravitationalAnomaly) entity).getRealMassUnsuppressed();
+				return ((TileEntityGravitationalAnomaly) entity).getRealMassUnsuppressed() * 10;
 			}
 		}
 		return 0;
@@ -413,6 +422,15 @@ public class TileEntityMachineFusionReactorController extends MOTileEntityMachin
 		return validStructure;
 	}
 
+	public String getCMonitorInfo() {
+		return ("POWER 100\nCHARGE "
+				+ DecimalFormat.getPercentInstance()
+						.format((double) getEnergyStorage().getEnergyStored()
+								/ (double) getEnergyStorage().getMaxEnergyStored())
+				+ "\nMATTER " + DecimalFormat.getPercentInstance().format(
+						(double) getMatterStorage().getMatterStored() / (double) getMatterStorage().getCapacity()));
+	}
+
 	public MonitorInfo getMonitorInfo() {
 		return monitorInfo;
 	}
@@ -450,58 +468,74 @@ public class TileEntityMachineFusionReactorController extends MOTileEntityMachin
 		return super.getCapability(capability, facing);
 	}
 
-	/*
-	 * //region ComputerCraft
-	 * 
-	 * @Override
-	 * 
-	 * @Optional.Method(modid = "ComputerCraft") public String getType() { return
-	 * componentComputers.getType(); }
-	 * 
-	 * @Override
-	 * 
-	 * @Optional.Method(modid = "ComputerCraft") public String[] getMethodNames() {
-	 * return componentComputers.getMethodNames(); }
-	 * 
-	 * @Override
-	 * 
-	 * @Optional.Method(modid = "ComputerCraft") public Object[]
-	 * callMethod(IComputerAccess computer, ILuaContext context, int method,
-	 * Object[] arguments) throws LuaException, InterruptedException { return
-	 * componentComputers.callMethod(computer,context,method,arguments); }
-	 * 
-	 * @Override
-	 * 
-	 * @Optional.Method(modid = "ComputerCraft") public void attach(IComputerAccess
-	 * computer) {componentComputers.attach(computer);}
-	 * 
-	 * @Override
-	 * 
-	 * @Optional.Method(modid = "ComputerCraft") public void detach(IComputerAccess
-	 * computer) {componentComputers.detach(computer);}
-	 * 
-	 * @Override
-	 * 
-	 * @Optional.Method(modid = "ComputerCraft") public boolean equals(IPeripheral
-	 * other) { return componentComputers.equals(other); }
-	 * 
-	 * 
-	 * @Override
-	 * 
-	 * @Optional.Method(modid = "OpenComputers") public String getComponentName() {
-	 * return componentComputers.getComponentName(); }
-	 * 
-	 * @Override
-	 * 
-	 * @Optional.Method(modid = "OpenComputers") public String[] methods() { return
-	 * componentComputers.methods(); }
-	 * 
-	 * @Override
-	 * 
-	 * @Optional.Method(modid = "OpenComputers") public Object[] invoke(String
-	 * method, Context context, Arguments args) throws Exception { return
-	 * componentComputers.invoke(method,context,args); }
-	 */
+	// region ComputerCraft
+
+	@Override
+
+	@Optional.Method(modid = "computercraft")
+	public String getType() {
+		return componentComputers.getType();
+	}
+
+	@Override
+
+	@Optional.Method(modid = "computercraft")
+	public String[] getMethodNames() {
+		return componentComputers.getMethodNames();
+	}
+
+	@Override
+
+	@Optional.Method(modid = "computercraft")
+	public Object[] callMethod(IComputerAccess computer, ILuaContext context, int method, Object[] arguments)
+			throws LuaException, InterruptedException {
+		return componentComputers.callMethod(computer, context, method, arguments);
+	}
+
+	@Override
+
+	@Optional.Method(modid = "computercraft")
+	public void attach(IComputerAccess computer) {
+		componentComputers.attach(computer);
+	}
+
+	@Override
+
+	@Optional.Method(modid = "computercraft")
+	public void detach(IComputerAccess computer) {
+		componentComputers.detach(computer);
+	}
+
+	@Override
+
+	@Optional.Method(modid = "computercraft")
+	public boolean equals(IPeripheral other) {
+		return componentComputers.equals(other);
+	}
+
+	// endregion
+
+	// region OpenComputers
+	@Override
+
+	@Optional.Method(modid = "opencomputers")
+	public String getComponentName() {
+		return componentComputers.getComponentName();
+	}
+
+	@Override
+
+	@Optional.Method(modid = "opencomputers")
+	public String[] methods() {
+		return componentComputers.getMethodNames();
+	}
+
+	@Override
+
+	@Optional.Method(modid = "OpenComputers")
+	public Object[] invoke(String method, Context context, Arguments args) throws Exception {
+		return componentComputers.invoke(method, context, args);
+	}
 
 	public static enum MonitorInfo implements IStringSerializable {
 		INVALID_STRUCTURE, NEED_COILS, INVALID_MATERIALS, NO_ANOMALY, ANOMALY_TOO_FAR, OK;

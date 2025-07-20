@@ -39,3 +39,6 @@ hs_err_pid*
 /*.iws
 classes/
 *.gradle
+gradlew.bat
+gradlew.bat
+*.bat

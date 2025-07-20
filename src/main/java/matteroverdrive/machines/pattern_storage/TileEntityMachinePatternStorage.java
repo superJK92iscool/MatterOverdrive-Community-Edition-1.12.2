@@ -20,8 +20,8 @@ import matteroverdrive.data.matter_network.MatterDatabaseEvent;
 import matteroverdrive.data.transport.MatterNetwork;
 import matteroverdrive.items.MatterScanner;
 import matteroverdrive.machines.MachineNBTCategory;
-import matteroverdrive.machines.components.ComponentMatterNetworkConfigs;
 import matteroverdrive.machines.events.MachineEvent;
+import matteroverdrive.machines.pattern_monitor.TileEntityMachinePatternMonitor;
 import matteroverdrive.matter_network.MatterNetworkTaskQueue;
 import matteroverdrive.matter_network.components.MatterNetworkComponentClient;
 import matteroverdrive.matter_network.components.TaskQueueComponent;
@@ -40,20 +40,23 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.text.TextFormatting;
 import net.minecraft.world.World;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
 public class TileEntityMachinePatternStorage extends MOTileEntityMachineEnergy implements IMatterNetworkClient,
 		IMatterDatabase, IScannable, IMatterNetworkConnection, IMatterNetworkDispatcher {
 	public static final int TASK_PROCESS_DELAY = 40;
+	public static int ENERGY_DRAIN_CHILL = 1000;
+	public static int ENERGY_DRAIN_PER_DRIVE = 100;
 	private static final EnumSet<UpgradeTypes> upgradeTypes = EnumSet.of(UpgradeTypes.PowerStorage,
 			UpgradeTypes.PowerUsage);
 	public static int ENERGY_CAPACITY = 512000;
 	public static int ENERGY_TRANSFER = 512000;
+	public static int patternCount = 0;
 	public int input_slot;
 	public int[] pattern_storage_slots;
 	private ComponentMatterNetworkPatternStorage networkComponent;
-	private ComponentMatterNetworkConfigs componentMatterNetworkConfigs;
 	private TaskQueueComponent<MatterNetworkTaskReplicatePattern, TileEntityMachinePatternStorage> taskQueueComponent;
 
 	public TileEntityMachinePatternStorage() {
@@ -73,16 +76,62 @@ public class TileEntityMachinePatternStorage extends MOTileEntityMachineEnergy i
 	@Override
 	public void update() {
 		super.update();
-
 		if (!world.isRemote) {
-			if (energyStorage.getEnergyStored() > 0) {
+			if (this.energyStorage.getEnergyStored() >= getEnergyDrainPerTick()) {
+				this.energyStorage.extractEnergy(getEnergyDrainPerTick(), false);
+				UpdateClientPower();
 				manageLinking();
 			}
+			if (getNetwork() != null) {
+				List<IMatterNetworkClient> clients = getNetwork().getClients();
+				List<IMatterDatabase> databases = new ArrayList<>();
+				List<TileEntityMachinePatternMonitor> monitors = new ArrayList<>();
+				for (IMatterNetworkClient client : clients) {
+					if (client instanceof IMatterDatabase) {
+						databases.add((IMatterDatabase) client);
+					}
+				}
+				patternCount = 0;
+				for (IMatterDatabase database : databases) {
+					for (ItemStack patternDrive : database.getPatternStorageList()) {
+						if (patternDrive != null && patternDrive.getItem() instanceof IMatterPatternStorage) {
+							int capacity = ((IMatterPatternStorage) patternDrive.getItem()).getCapacity(patternDrive);
+							for (int i = 0; i < capacity; i++) {
+								ItemPattern pattern = ((IMatterPatternStorage) patternDrive.getItem())
+										.getPatternAt(patternDrive, i);
+								if (pattern != null) {
+									patternCount++;
+								}
+							}
+						}
+					}
+				}
+				for (IMatterNetworkClient client : clients) {
+					if (client instanceof TileEntityMachinePatternMonitor
+							&& ((TileEntityMachinePatternMonitor) client).getNetwork() == this.getNetwork()) {
+						monitors.add((TileEntityMachinePatternMonitor) client);
+						TileEntityMachinePatternMonitor tileEntity = (TileEntityMachinePatternMonitor) world
+								.getTileEntity(((TileEntityMachinePatternMonitor) client).getPos());
+						tileEntity.setCount(patternCount);
+						world.markBlockRangeForRenderUpdate(((TileEntityMachinePatternMonitor) client).getPos(),
+								((TileEntityMachinePatternMonitor) client).getPos());
+						world.notifyBlockUpdate(((TileEntityMachinePatternMonitor) client).getPos(),
+								world.getBlockState(((TileEntityMachinePatternMonitor) client).getPos()),
+								world.getBlockState(((TileEntityMachinePatternMonitor) client).getPos()), 3);
+						world.scheduleBlockUpdate(((TileEntityMachinePatternMonitor) client).getPos(),
+								this.getBlockType(), 0, 0);
+						markDirty();
+					}
+				}
+			}
+
 		} else {
-			if (isActive() && random.nextFloat() < 0.2f && getBlockType(BlockPatternStorage.class) != null
-					&& getBlockType(BlockPatternStorage.class).hasVentParticles
-					&& world.getBlockState(getPos()).getBlock() == MatterOverdrive.BLOCKS.pattern_storage) {
-				SpawnVentParticles(0.03f, world.getBlockState(getPos()).getValue(MOBlock.PROPERTY_DIRECTION), 1);
+			if (hasEnoughPower()) {
+				if (isActive() && random.nextFloat() < 0.2f && getBlockType(BlockPatternStorage.class) != null
+						&& getBlockType(BlockPatternStorage.class).hasVentParticles
+						&& world.getBlockState(getPos()).getBlock() == MatterOverdrive.BLOCKS.pattern_storage) {
+					SpawnVentParticles(0.03f, world.getBlockState(getPos()).getValue(MOBlock.PROPERTY_DIRECTION), 1);
+				}
 			}
 		}
 	}
@@ -102,10 +151,8 @@ public class TileEntityMachinePatternStorage extends MOTileEntityMachineEnergy i
 	@Override
 	protected void registerComponents() {
 		super.registerComponents();
-		componentMatterNetworkConfigs = new ComponentMatterNetworkConfigs(this);
 		networkComponent = new ComponentMatterNetworkPatternStorage(this);
 		taskQueueComponent = new TaskQueueComponent<>("Tasks", this, 1, 0);
-		addComponent(componentMatterNetworkConfigs);
 		addComponent(networkComponent);
 		addComponent(taskQueueComponent);
 	}
@@ -336,13 +383,39 @@ public class TileEntityMachinePatternStorage extends MOTileEntityMachineEnergy i
 
 	@Override
 	public boolean canConnectFromSide(IBlockState blockState, EnumFacing side) {
-		// return side == blockState.getValue(MOBlock.PROPERTY_DIRECTION);
+		EnumFacing facing = blockState.getValue(MOBlock.PROPERTY_DIRECTION);
+		return facing.getOpposite() == side;
+	}
 
-		// Let's see if this allows connections from ANY side.
-		return true;
+	public boolean hasEnoughPower() {
+		return energyStorage.getEnergyStored() >= getEnergyDrainPerTick();
+	}
 
-		// EnumFacing facing = blockState.getValue(MOBlock.PROPERTY_DIRECTION);
-		// return facing.getOpposite() == side;
+	public int getEnergyDrainPerTick() {
+		int maxEnergy = getEnergyDrainMax();
+		return maxEnergy;
+	}
+
+	public int getEnergyDrainMax() {
+		int patternDrives = 0;
+		for (ItemStack patternDrive : getPatternStorageList()) {
+			if (patternDrive != null && patternDrive.getItem() instanceof IMatterPatternStorage) {
+				int capacity = ((IMatterPatternStorage) patternDrive.getItem()).getCapacity(patternDrive);
+				for (int i = 0; i < capacity; i++) {
+					IMatterPatternStorage pattern = ((IMatterPatternStorage) patternDrive.getItem());
+					if (pattern != null) {
+						patternDrives++;
+					}
+				}
+			}
+		}
+		if (patternDrives > 0) {
+			patternDrives = patternDrives / 2;
+			int Drives = ENERGY_DRAIN_PER_DRIVE * patternDrives;
+			return (int) Math.round(Drives) + Math.round(ENERGY_DRAIN_CHILL);
+		} else {
+			return (int) Math.round(ENERGY_DRAIN_CHILL);
+		}
 	}
 
 	@Override

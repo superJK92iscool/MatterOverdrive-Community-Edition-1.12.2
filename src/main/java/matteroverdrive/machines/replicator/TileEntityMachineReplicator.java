@@ -21,6 +21,7 @@ import matteroverdrive.machines.events.MachineEvent;
 import matteroverdrive.matter_network.MatterNetworkTaskQueue;
 import matteroverdrive.matter_network.components.MatterNetworkComponentClient;
 import matteroverdrive.tile.MOTileEntityMachineMatter;
+import matteroverdrive.util.MOBlockHelper;
 import matteroverdrive.util.math.MOMathHelper;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
@@ -144,9 +145,9 @@ public class TileEntityMachineReplicator extends MOTileEntityMachineMatter
 		if (isActive()) {
 			if (getBlockType(BlockReplicator.class).hasVentParticles) {
 				SpawnVentParticles(0.05f,
-						getLeftSide(getWorld().getBlockState(getPos()).getValue(MOBlock.PROPERTY_DIRECTION)), 1);
+						MOBlockHelper.getLeftSide(getWorld().getBlockState(getPos()).getValue(MOBlock.PROPERTY_DIRECTION)), 1);
 				SpawnVentParticles(0.05f,
-						getLeftSide(getWorld().getBlockState(getPos()).getValue(MOBlock.PROPERTY_DIRECTION)), 1);
+						MOBlockHelper.getRightSide(getWorld().getBlockState(getPos()).getValue(MOBlock.PROPERTY_DIRECTION)), 1);
 			}
 		}
 	}
@@ -160,6 +161,8 @@ public class TileEntityMachineReplicator extends MOTileEntityMachineMatter
 					&& getStackInSlot(OUTPUT_SLOT_ID).getItemDamage() == item.getItemDamage()
 					&& getStackInSlot(OUTPUT_SLOT_ID).getItem() == item.getItem()) {
 				int newStackSize = getStackInSlot(OUTPUT_SLOT_ID).getCount() + 1;
+				this.world.markBlockRangeForRenderUpdate(this.pos, this.pos);
+					markDirty();
 
 				if (newStackSize <= getStackInSlot(OUTPUT_SLOT_ID).getMaxStackSize()) {
 					getStackInSlot(OUTPUT_SLOT_ID).setCount(newStackSize);
@@ -302,10 +305,7 @@ public class TileEntityMachineReplicator extends MOTileEntityMachineMatter
 
 	@Override
 	public boolean canConnectFromSide(IBlockState blockState, EnumFacing side) {
-		// Allow connections from any side.
-		return true;
-
-//        return blockState.getValue(MOBlock.PROPERTY_DIRECTION).getOpposite().equals(side);
+        return blockState.getValue(MOBlock.PROPERTY_DIRECTION).getOpposite().equals(side);
 	}
 
 	@Override

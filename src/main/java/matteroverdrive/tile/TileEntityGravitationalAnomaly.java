@@ -28,9 +28,9 @@ import matteroverdrive.init.OverdriveBioticStats;
 import matteroverdrive.items.SpacetimeEqualizer;
 import matteroverdrive.machines.MachineNBTCategory;
 import matteroverdrive.util.MOLog;
-import matteroverdrive.util.MOStringHelper;
 import matteroverdrive.util.MatterHelper;
 import matteroverdrive.util.TimeTracker;
+import matteroverdrive.util.Vector3;
 import matteroverdrive.util.math.MOMathHelper;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockLiquid;
@@ -43,16 +43,17 @@ import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
 import net.minecraft.init.Items;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.network.NetworkManager;
 import net.minecraft.network.play.server.SPacketUpdateTileEntity;
 import net.minecraft.util.DamageSource;
-import net.minecraft.util.ITickable;
 import net.minecraft.util.SoundCategory;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
@@ -64,83 +65,88 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
-public class TileEntityGravitationalAnomaly extends MOTileEntity
-		implements IScannable, IMOTickable, IGravitationalAnomaly, ITickable {
-	public static final float MAX_VOLUME = 0.5f;
-	public static final int BLOCK_DESTORY_DELAY = 6;
-	public static final int MAX_BLOCKS_PER_HARVEST = 6;
-	public static final int MAX_LIQUIDS_PER_HARVEST = 32;
-	public static final double STREHGTH_MULTIPLYER = 0.00001;
-	public static final double G = 6.67384;
-	public static final double G2 = G * 2;
-	public static final double C = 2.99792458;
-	public static final double CC = C * C;
-	public static boolean FALLING_BLOCKS = true;
-	public static boolean BLOCK_ENTETIES = true;
-	public static boolean VANILLA_FLUIDS = true;
-	public static boolean FORGE_FLUIDS = true;
-	public static boolean BLOCK_DESTRUCTION = true;
-	public static boolean GRAVITATION = true;
-	public static boolean SOUND = true;
-	private final TimeTracker blockDestoryTimer;
-	PriorityQueue<BlockPos> blocks;
-	List<AnomalySuppressor> supressors;
-	@SideOnly(Side.CLIENT)
-	private GravitationalAnomalySound sound;
-	private long mass;
-	private float suppression;
-	public int tickCounter = 0;
-	public int index = 0;
+public class TileEntityGravitationalAnomaly extends MOTileEntity implements IScannable, IMOTickable,IGravitationalAnomaly
+{
+    public static boolean FALLING_BLOCKS = true;
+    public static boolean BLOCK_ENTETIES = true;
+    public static boolean VANILLA_FLUIDS = true;
+    public static boolean FORGE_FLUIDS = true;
+    public static boolean BLOCK_DESTRUCTION = true;
+    public static boolean GRAVITATION = true;
+    public static boolean SOUND = true;
+    public static final float MAX_VOLUME = 0.5f;
+    public static final int BLOCK_DESTORY_DELAY = 6;
+    public static final int MAX_BLOCKS_PER_HARVEST = 6;
+    public static final int MAX_LIQUIDS_PER_HARVEST = 32;
+    public static final double STREHGTH_MULTIPLYER = 0.00001;
+    public static final double G = 6.67384;
+    public static final double G2 = G * 2;
+    public static final double C = 2.99792458;
+    public static final double CC = C * C;
 
-	public TileEntityGravitationalAnomaly() {
-		this(2048 + Math.round(Math.random() * 8192));
-	}
+    @SideOnly(Side.CLIENT)
+    private GravitationalAnomalySound sound;
+    private TimeTracker blockDestoryTimer;
+    private long mass;
+    PriorityQueue<BlockPos> blocks;
+    List<AnomalySuppressor> supressors;
+    private float suppression;
 
-	public TileEntityGravitationalAnomaly(long mass) {
-		blockDestoryTimer = new TimeTracker();
-		this.mass = mass;
-		supressors = new ArrayList<>();
-	}
+    private BlockPos blockPos;
+    public int tickCounter = 0;
+    public int index = 0;
 
-	@Override
-	public BlockPos getPosition() {
-		return getPos();
-	}
+    //region Constructors
+    public TileEntityGravitationalAnomaly()
+    {
+        blockDestoryTimer = new TimeTracker();
+        this.mass = 2048 + Math.round(Math.random() * 8192);
+        supressors = new ArrayList<>();
+    }
 
-	@Override
-	public void update() {
-		if (world.isRemote) {
-			spawnParticles(world);
-			manageSound();
-			manageClientEntityGravitation(world);
-		}
-	}
+    public TileEntityGravitationalAnomaly(int mass)
+    {
+        this();
+        this.mass = mass;
+    }
+    //endregion
 
-	public void setMass(long mass) {
-		this.mass = mass;
-	}
+    //region Updates
+    @Override
+    public void update()
+    {
+        if (world.isRemote)
+        {
+            spawnParticles(world);
+            manageSound();
+            manageClientEntityGravitation(world);
+        }
+    }
 
-	@Override
-	public void onServerTick(TickEvent.Phase phase, World world) {
-		if (world == null) {
-			return;
-		}
+    @Override
+    public void onServerTick(TickEvent.Phase phase,World world)
+    {
+        if (world == null)
+            return;
 
-		if (phase.equals(TickEvent.Phase.END)) {
-			float tmpSuppression = calculateSuppression();
-			if (tmpSuppression != suppression) {
-				suppression = tmpSuppression;
-			}
+        if (phase.equals(TickEvent.Phase.END))
+        {
+            float tmpSuppression = calculateSuppression();
+            if (tmpSuppression != suppression)
+            {
+                suppression = tmpSuppression;
+            }
 
 			manageEntityGravitation(world, 0);
 			tickCounter++;
-			if (tickCounter==40) {
+			if (tickCounter==20) {
 				manageBlockDestory(world);
 				index++;
 				tickCounter = 0;
 			}
 		}
 	}
+    //endregion
 
 	@SideOnly(Side.CLIENT)
 	public void spawnParticles(World world) {
@@ -182,6 +188,7 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 			Minecraft.getMinecraft().player.velocityChanged = true;
 		}
 	}
+
 
 	public void manageEntityGravitation(World world, float ticks) {
 		if (!GRAVITATION) {
@@ -242,14 +249,17 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 		}
 	}
 
-	@SideOnly(Side.CLIENT)
-	public void stopSounds() {
-		if (sound != null) {
-			sound.stopPlaying();
-			FMLClientHandler.instance().getClient().getSoundHandler().stopSound(sound);
-			sound = null;
-		}
-	}
+    //region Sounds
+    @SideOnly(Side.CLIENT)
+    public void stopSounds()
+    {
+        if (sound != null)
+        {
+            sound.stopPlaying();
+            FMLClientHandler.instance().getClient().getSoundHandler().stopSound(sound);
+            sound = null;
+        }
+    }
 
 	@SideOnly(Side.CLIENT)
 	public void playSounds() {
@@ -265,29 +275,30 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 		}
 	}
 
-	@SideOnly(Side.CLIENT)
-	public void manageSound() {
-		if(SOUND) {
-			if (sound == null) {
-				playSounds();
-			} else {
-				sound.setVolume(Math.min(MAX_VOLUME, getBreakStrength(0, (float) getMaxRange()) * 0.1f));
-				sound.setRange(getMaxRange());
-			}
-		} else {
-			stopSounds();
-		}
-	}
+    @SideOnly(Side.CLIENT)
+    public void manageSound()
+    {
+        if (sound == null)
+        {
+            playSounds();
+        }else
+        {
+            sound.setVolume(Math.min(MAX_VOLUME,getBreakStrength(0,(float)getMaxRange()) * 0.1f));
+            sound.setRange(getMaxRange());
+        }
+    }
+    //endregion
 
+    //region Super Events
 	@Override
 	public void onAdded(World world, BlockPos pos, IBlockState state) {
 
 	}
 
-	@Override
-	public void onPlaced(World world, EntityLivingBase entityLiving) {
+    @Override
+    public void onPlaced(World world, EntityLivingBase entityLiving) {
 
-	}
+    }
 
 	@Override
 	public void onDestroyed(World worldIn, BlockPos pos, IBlockState state) {
@@ -299,20 +310,20 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 
 	}
 
-	@Override
-	public void writeToDropItem(ItemStack itemStack) {
+    @Override
+    public void writeToDropItem(ItemStack itemStack) {
 
-	}
+    }
 
-	@Override
-	public void readFromPlaceItem(ItemStack itemStack) {
+    @Override
+    public void readFromPlaceItem(ItemStack itemStack) {
 
-	}
+    }
 
-	@Override
-	public void onScan(World world, double x, double y, double z, EntityPlayer player, ItemStack scanner) {
+    @Override
+    public void onScan(World world, double x, double y, double z, EntityPlayer player, ItemStack scanner) {
 
-	}
+    }
 
 	public void onChunkUnload() {
 		super.onChunkUnload();
@@ -321,10 +332,10 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 		}
 	}
 
-	@Override
-	protected void onAwake(Side side) {
+    @Override
+    protected void onAwake(Side side) {
 
-	}
+    }
 
 	@Nullable
 	@Override
@@ -349,7 +360,9 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 			stopSounds();
 		}
 	}
+    //endregion
 
+    //region Events
 	private boolean onEntityConsume(Entity entity, boolean pre) {
 		if (entity instanceof IGravityEntity) {
 			((IGravityEntity) entity).onEntityConsumed(this);
@@ -362,6 +375,7 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 
 		return true;
 	}
+    //endregion
 
 	public void manageBlockDestory(World world) {
 		if (!BLOCK_DESTRUCTION) {
@@ -428,27 +442,29 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 		}
 	}
 
-	public void consume(Entity entity) {
+    //region Consume Type Handlers
+    public void consume(Entity entity) {
 
-		if (!entity.isDead && onEntityConsume(entity, true)) {
+        if (!entity.isDead && onEntityConsume(entity,true)) {
 
-			boolean consumedFlag = false;
+            boolean consumedFlag = false;
 
-			if (entity instanceof EntityItem) {
-				consumedFlag |= consumeEntityItem((EntityItem) entity);
-			} else if (entity instanceof EntityFallingBlock) {
-				consumedFlag |= consumeFallingBlock((EntityFallingBlock) entity);
-			} else if (entity instanceof EntityLivingBase) {
-				consumedFlag |= consumeLivingEntity((EntityLivingBase) entity,
-						getBreakStrength((float) entity.getDistance(getPos().getX(), getPos().getY(), getPos().getZ()),
+            if (entity instanceof EntityItem) {
+                consumedFlag |= consumeEntityItem((EntityItem)entity);
+            } else if (entity instanceof EntityFallingBlock) {
+                consumedFlag |= consumeFallingBlock((EntityFallingBlock)entity);
+            } else if (entity instanceof EntityLivingBase)
+            {
+                consumedFlag |= consumeLivingEntity((EntityLivingBase) entity,getBreakStrength((float) entity.getDistance(getPos().getX(), getPos().getY(), getPos().getZ()),
 								(float) getMaxRange()));
-			}
+            }
 
-			if (consumedFlag) {
-				onEntityConsume(entity, false);
-			}
-		}
-	}
+            if (consumedFlag)
+            {
+                onEntityConsume(entity, false);
+            }
+        }
+    }
 
 	private boolean consumeEntityItem(EntityItem entityItem) {
 		ItemStack itemStack = entityItem.getItem();
@@ -516,39 +532,42 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 		entity.attackEntityFrom(damageSource, strength);
 		return true;
 	}
+    //endregion
 
 	public boolean breakBlock(World world, BlockPos pos, float strength, double eventHorizon, int range) {
-		IBlockState blockState = world.getBlockState(pos);
+    	IBlockState blockState = world.getBlockState(pos);
 		if (blockState.getBlock().isAir(blockState, world, pos)) {
 			return true;
 		}
-
 		float hardness = blockState.getBlockHardness(world, pos);
 		double distance = Math.sqrt(pos.distanceSq(getPos()));
-		if (distance <= range && hardness >= 0 && (distance < eventHorizon || hardness < strength)) {
-			if (BLOCK_ENTETIES) {
+        if (distance <= range && hardness >= 0 && (distance < eventHorizon || hardness < strength))
+        {
+            if (BLOCK_ENTETIES) {
 
-				if (FALLING_BLOCKS) {
-					EntityFallingBlock fallingBlock = new EntityFallingBlock(world, pos.getX() + 0.5, pos.getY() + 0.5,
-							pos.getZ() + 0.5, blockState);
-					fallingBlock.fallTime = 5;
-					fallingBlock.noClip = true;
-					world.spawnEntity(fallingBlock);
-				} else {
-					ItemStack bStack = blockState.getBlock().getPickBlock(blockState, null, world, pos, null);
-					if (!bStack.isEmpty()) {
-						EntityItem item = new EntityItem(world, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
-								bStack);
-						world.spawnEntity(item);
-					}
-				}
+                if (FALLING_BLOCKS)
+                {
+                	EntityFallingBlock fallingBlock = new EntityFallingBlock(world, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, blockState);
+                    fallingBlock.fallTime = 1;
+                    fallingBlock.noClip = true;
+                    world.spawnEntity(fallingBlock);
+                }
+                else {
+                	ItemStack bStack = blockState.getBlock().getPickBlock(blockState, null, world, pos, null);
+                    if (bStack != null)
+                    {
+                    	EntityItem item = new EntityItem(world, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,  bStack);
+                        world.spawnEntity(item);
+                    }
+                }
 
-				blockState.getBlock().breakBlock(world, pos, blockState);
-				world.playBroadcastSound(2001, pos, Block.getIdFromBlock(blockState.getBlock()));
-				world.setBlockToAir(pos);
-				return true;
-			} else {
-				int matter = 0;
+                blockState.getBlock().breakBlock(world, pos, blockState);
+                world.playBroadcastSound(2001, pos, Block.getIdFromBlock(blockState.getBlock()));
+                world.setBlockToAir(pos);
+                return true;
+            }else
+            {
+                int matter = 0;
 
 				if (blockState.getBlock().canSilkHarvest(world, pos, blockState, null)) {
 					matter += MatterHelper.getMatterAmountFromItem(
@@ -559,29 +578,43 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 					}
 				}
 
-				world.playBroadcastSound(2001, pos, Block.getIdFromBlock(blockState.getBlock()));
+                world.playBroadcastSound(2001, pos, Block.getIdFromBlock(blockState.getBlock()));
 
-				List<EntityItem> result = world.getEntitiesWithinAABB(EntityItem.class,
-						new AxisAlignedBB(pos.getX() - 2, pos.getY() - 2, pos.getZ() - 2, pos.getX() + 3,
-								pos.getY() + 3, pos.getZ() + 3));
-				for (EntityItem entityItem : result) {
-					consumeEntityItem(entityItem);
-				}
+                List<EntityItem> result = world.getEntitiesWithinAABB(EntityItem.class, new AxisAlignedBB(pos.getX() - 2, pos.getY() - 2, pos.getZ() - 2, pos.getX() + 3,pos.getY() + 3, pos.getZ() + 3));
+                for (EntityItem entityItem : result) {
+                    consumeEntityItem(entityItem);
+                }
 
-				try {
-					mass = Math.addExact(mass, matter);
-					markDirty();
-				} catch (ArithmeticException e) {
-					return false;
-				}
+                try {
+                    mass = Math.addExact(mass,matter);
+                }
+                catch (ArithmeticException e)
+                {
+                    return false;
+                }
 
-				world.setBlockToAir(pos);
-				return true;
-			}
-		}
+                world.setBlockToAir(pos);
+                return true;
+            }
+        }
 
-		return false;
-	}
+        return false;
+    }
+	
+    //region Helper Methods
+    protected ItemStack createStackedBlock(Block block,int meta)
+    {
+        if (block != null) {
+            Item item = Item.getItemFromBlock(block);
+            if (item != null) {
+                if (item.getHasSubtypes()) {
+                    return new ItemStack(item, 1, meta);
+                }
+                return new ItemStack(item, 1, 0);
+            }
+        }
+        return null;
+    }
 
 	public boolean cleanLiquids(IBlockState blockState, BlockPos pos) {
 		if (blockState.getBlock() instanceof IFluidBlock && FORGE_FLUIDS) {
@@ -624,126 +657,163 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 		return false;
 	}
 
-	// TODO: Rewrite explosion to be more.. explosion
+    //endregion
+
 	public void collapse() {
 		world.setBlockToAir(getPos());
 		world.createExplosion(null, getPos().getX(), getPos().getY(), getPos().getZ(),
 				(float) getRealMassUnsuppressed(), true);
 	}
 
-	@Override
-	public void addInfo(World world, double x, double y, double z, List<String> infos) {
-		DecimalFormat format = new DecimalFormat("#.##");
-		infos.add(MOStringHelper.translateToLocal("anomaly.info.mass") + ": " + mass);
-		infos.add(MOStringHelper.translateToLocal("anomaly.info.range") + ": " + format.format(getMaxRange()));
-		infos.add(MOStringHelper.translateToLocal("anomaly.info.brake_range") + ": " + format.format(getBlockBreakRange()));
-		infos.add(MOStringHelper.translateToLocal("anomaly.info.horizon") + ": " + format.format(getEventHorizon()));
-		infos.add(MOStringHelper.translateToLocal("anomaly.info.brake_lvl") + ": " + format.format(getBreakStrength()));
-	}
+    @Override
+    public void addInfo(World world, double x, double y, double z, List<String> infos)
+    {
+        DecimalFormat format = new DecimalFormat("#.##");
+        infos.add("Mass: " + mass);
+        infos.add("Range: " + format.format(getMaxRange()));
+        infos.add("Brake Range: " + format.format(getBlockBreakRange()));
+        infos.add("Horizon: " + format.format(getEventHorizon()));
+        infos.add("Brake Lvl: " + format.format(getBreakStrength()));
+    }
 
-	public void suppress(AnomalySuppressor suppressor) {
-		for (AnomalySuppressor s : supressors) {
-			if (s.update(suppressor)) {
-				return;
-			}
-		}
+    public void suppress(AnomalySuppressor suppressor)
+    {
+        for (AnomalySuppressor s : supressors)
+        {
+            if (s.update(suppressor))
+            {
+                return;
+            }
+        }
 
-		supressors.add(suppressor);
-	}
+        supressors.add(suppressor);
+    }
 
-	private float calculateSuppression() {
-		float suppression = 1;
-		Iterator<AnomalySuppressor> iterator = supressors.iterator();
-		while (iterator.hasNext()) {
-			AnomalySuppressor s = iterator.next();
-			if (!s.isValid()) {
-				iterator.remove();
-			}
-			s.tick();
-			suppression *= s.getAmount();
-		}
-		return suppression;
-	}
+    private float calculateSuppression()
+    {
+        float suppression = 1;
+        Iterator<AnomalySuppressor> iterator = supressors.iterator();
+        while (iterator.hasNext())
+        {
+            AnomalySuppressor s = iterator.next();
+            if (!s.isValid())
+            {
+                iterator.remove();
+            }
+                s.tick();
+            suppression *= s.getAmount();
+        }
+        return suppression;
+    }
 
-	@Override
-	public void writeCustomNBT(NBTTagCompound nbt, EnumSet<MachineNBTCategory> categories, boolean toDisk) {
-		if (categories.contains(MachineNBTCategory.DATA)) {
-			nbt.setLong("Mass", mass);
-			nbt.setFloat("Suppression", suppression);
-			if (toDisk && this.supressors != null && !this.supressors.isEmpty()) {
-				NBTTagList suppressors = new NBTTagList();
-				for (AnomalySuppressor s : this.supressors) {
-					NBTTagCompound suppressorTag = new NBTTagCompound();
-					s.writeToNBT(suppressorTag);
-					suppressors.appendTag(suppressorTag);
-				}
-				nbt.setTag("suppressors", suppressors);
-			}
-		}
-	}
+    //region NBT
+    @Override
+    public void writeCustomNBT(NBTTagCompound nbt, EnumSet<MachineNBTCategory> categories, boolean toDisk)
+    {
+        if (categories.contains(MachineNBTCategory.DATA)) {
+            nbt.setLong("Mass", mass);
+            nbt.setFloat("Suppression", suppression);
+            if (toDisk)
+            {
+                NBTTagList suppressors = new NBTTagList();
+                for (AnomalySuppressor s : this.supressors)
+                {
+                    NBTTagCompound suppressorTag = new NBTTagCompound();
+                    s.writeToNBT(suppressorTag);
+                    suppressors.appendTag(suppressorTag);
+                }
+                nbt.setTag("suppressors", suppressors);
+            }
+        }
+    }
 
-	@Override
-	public void readCustomNBT(NBTTagCompound nbt, EnumSet<MachineNBTCategory> categories) {
-		if (categories.contains(MachineNBTCategory.DATA)) {
-			this.supressors.clear();
-			mass = nbt.getLong("Mass");
-			suppression = nbt.getFloat("Suppression");
-			NBTTagList suppressors = nbt.getTagList("suppressors", Constants.NBT.TAG_COMPOUND);
-			for (int i = 0; i < supressors.size(); i++) {
-				NBTTagCompound suppressorTag = suppressors.getCompoundTagAt(i);
-				AnomalySuppressor s = new AnomalySuppressor(suppressorTag);
-				this.supressors.add(s);
-			}
-		}
-	}
+    @Override
+    public void readCustomNBT(NBTTagCompound nbt, EnumSet<MachineNBTCategory> categories)
+    {
+        if (categories.contains(MachineNBTCategory.DATA)) {
+            this.supressors.clear();
+            mass = nbt.getLong("Mass");
+            suppression = nbt.getFloat("Suppression");
+            NBTTagList suppressors = nbt.getTagList("suppressors", Constants.NBT.TAG_COMPOUND);
+            for (int i = 0;i < supressors.size();i++)
+            {
+                NBTTagCompound suppressorTag = suppressors.getCompoundTagAt(i);
+                AnomalySuppressor s = new AnomalySuppressor(suppressorTag);
+                this.supressors.add(s);
+            }
+        }
+    }
+    //endregion
 
-	@SideOnly(Side.CLIENT)
-	public double getMaxRenderDistanceSquared() {
-		return Math.max(Math.pow(getMaxRange(), 3), 2048);
-	}
+    //region Getters and Setters
+    @SideOnly(Side.CLIENT)
+    public double getMaxRenderDistanceSquared()
+    {
+        return Math.max(Math.pow(getMaxRange(),3),2048);
+    }
 
-	public Block getBlock(World world, BlockPos blockPos) {
-		return world.getBlockState(blockPos).getBlock();
-	}
+    public Block getBlock(World world,int x,int y,int z)
+    {
+    	return world.getBlockState(blockPos).getBlock();
+    }
 
-	public double getEventHorizon() {
-		return Math.max((G2 * getRealMass()) / CC, 0.5);
-	}
+    public double getEventHorizon()
+    {
+        return Math.max((G2 * getRealMass()) / CC,0.5);
+    }
 
-	public double getBlockBreakRange() {
-		return getMaxRange() / 2;
-	}
+    public double getBlockBreakRange()
+    {
+        return getMaxRange() / 2;
+    }
 
-	public double getMaxRange() {
-		return Math.sqrt(getRealMass() * (G / 0.01));
-	}
+    public double getMaxRange()
+    {
+        return Math.sqrt(getRealMass()*(G/0.01));
+    }
 
-	public double getAcceleration(double distanceSq) {
-		return G * (getRealMass() / Math.max(distanceSq, 0.0001f));
-	}
+    public double getAcceleration(double distanceSq)
+    {
+        return G * (getRealMass() / Math.max(distanceSq,0.0001f));
+    }
 
-	public double getRealMass() {
-		return getRealMassUnsuppressed() * suppression;
-	}
+    public double getRealMass() {
+        return getRealMassUnsuppressed() * suppression;
+    }
 
-	public double getRealMassUnsuppressed() {
-		return Math.log1p(Math.max(mass, 0) * STREHGTH_MULTIPLYER);
-	}
+    public double getRealMassUnsuppressed()
+    {
+        return Math.log1p(Math.max(mass,0) * STREHGTH_MULTIPLYER);
+    }
 
-	public float getBreakStrength(float distance, float maxRange) {
-		return ((float) getRealMass() * 4 * suppression) * getDistanceFalloff(distance, maxRange);
+    public float getBreakStrength(float distance,float maxRange)
+    {
+        return ((float)getRealMass() * 4 * suppression) * getDistanceFalloff(distance,maxRange);
+    }
 
-	}
+    public float getDistanceFalloff(float distance,float maxRange)
+    {
+        return (1 - (distance / maxRange));
+    }
 
-	public float getDistanceFalloff(float distance, float maxRange) {
-		return (1 - (distance / maxRange));
-	}
+    public float getBreakStrength()
+    {
+        return (float)getRealMass() * 4 * suppression;
+    }
+    //endregion
 
-	@Override
-	@Deprecated
-	public float getBreakStrength() {
-		return (float) getRealMass() * 4 * suppression;
-	}
+    //region Sub Classes
+    public static class PositionWrapper
+    {
+        int x,y,z;
+
+        public PositionWrapper(int x,int y,int z)
+        {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+    }
 
 	public static class BlockComparitor implements Comparator<BlockPos> {
 		private final BlockPos pos;
@@ -759,4 +829,11 @@ public class TileEntityGravitationalAnomaly extends MOTileEntity
 		}
 	}
 
+    //endregion
+
+	@Override
+	public BlockPos getPosition() {
+		// TODO Auto-generated method stub
+		return null;
+	}
 }
